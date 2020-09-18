@@ -1,0 +1,6 @@
+pandas
+xlrd
+setuptools>=40.8.0
+progressbar2
+colorlog
+
