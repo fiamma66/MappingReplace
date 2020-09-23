@@ -93,8 +93,27 @@ class App:
         file_frame.pack(side=tk.TOP)
         self.mapping_file_entry = tk.Entry(file_frame, width=60)
         self.mapping_file_entry.pack(side=tk.LEFT)
+
         # Default
         self.mapping_file_entry.insert(tk.END, '< MAPPING FILE > Type or Browsing')
+
+        def select_all(event=None):
+
+            if event is None:
+                return
+
+            self.mapping_file_entry.focus()
+
+            self.mapping_file_entry.selection_range(0, tk.END)
+
+            return 'break'
+
+        # self.mapping_file_entry.bind('<Control-a>', select_all)
+        self.mapping_file_entry.bind('<Control-A>', select_all)
+
+        # MacOS
+        # self.mapping_file_entry.bind('<Command-a>', select_all)
+        self.mapping_file_entry.bind('<Command-A>', select_all)
 
         # Make File Browsing
         file_browse = tk.Button(file_frame, text='Browse', font=40, command=self.__browsing_file)
@@ -216,3 +235,13 @@ class App:
 if __name__ == '__main__':
     window = App()
     window.build_window().mainloop()
+    # pbar = {
+    #     'maximum': 0,
+    #     'value' : 0
+    # }
+    # main(mapping_file='/Users/fiammahsu/Workplace/netpro/FET/ONE_PLATFORM/KeyWordMapping.xlsx',
+    #      sheetname='Mapping', skip_rows=1,
+    #      target=['/Users/fiammahsu/Workplace/netpro/FET/ONE_PLATFORM/00000_TD 2800 修改/TD6750/\
+    #      CIM_PROD EXPORT_CAMPAIGN SR174788_TRM_UDV_TRANSFER_QTY_INTERNAL_CALL STEP0101_TRANSFORM sqlExecutor.txt'],
+    #      output_path='/Users/fiammahsu/Workplace/python/micro/MappingReplace',
+    #      p_bar=pbar)

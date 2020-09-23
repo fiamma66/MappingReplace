@@ -1,13 +1,20 @@
+# import traceback
 import log
 from mapping import *
 import progressbar
 import re
 import time
+# import sys
 
 
 progressbar.streams.wrap_stderr()
 logger = log.getLogger(__name__)
 logger.addHandler(log.queue_handler)
+
+
+class SafeDict(dict):
+    def __missing__(self, key):
+        return '{' + key + '}'
 
 
 def file_len(fname):
@@ -45,6 +52,8 @@ class MyProcess:
         self.output = pathlib.Path(output_path).expanduser().resolve()
         if not self.output.exists():
             self.output.mkdir(parents=True, exist_ok=True)
+
+        self.regex_check = re.compile(r'\br\b ', flags=re.I)
 
     def prepare_target_file(self):
         if isinstance(self.target_file, list):
@@ -113,26 +122,114 @@ class MyProcess:
             logger.info('Writting Summary to {}'.format(output_file))
             self.log_file.to_excel(output_file, index=False)
 
+    def __rex_use(self, old_mapping, new_mapping):
+        """
+        :param old_mapping: Excel old Mapping
+        :return: 1. if there is regex {r REGEX} in old Mapping
+                 Split it and update old Mapping
+
+                 2. if use_regex is true , replace all $1 $2 in new Mapping
+        """
+
+        use_regex = False
+        # logger.warning('Passing Mapping is '.format(old_mapping))
+        prepare_old_mapping = ()
+
+        for i, mapping in enumerate(old_mapping):
+
+            if re.search(self.regex_check, str(mapping)):
+                # logger.warning('Detecting Regex Mapping')
+                use_regex = True
+
+                # logger.warning('Splitting Regex Mapping')
+
+                sp = re.split(pattern=self.regex_check, string=mapping)
+
+                # logger.error(sp)
+
+                prepare_old_mapping = prepare_old_mapping + (re.compile(sp[1], flags=re.I), )
+                # logger.warning('Complete Splitting Regex')
+                # logger.warning(old_mapping[i])
+            else:
+                prepare_old_mapping = prepare_old_mapping + (mapping, )
+
+        if use_regex:
+
+            # logger.warning('Change $NUM to {V_PRE$NUM}')
+
+            new_mapping = [re.sub(r'\$(\d+)', r'{V_PRE\g<1>}', mapping) for mapping in new_mapping]
+
+        return prepare_old_mapping, new_mapping, use_regex
+
     def replace_string(self, string, mapping_tuple, filename, line_num):
         old = mapping_tuple[0]
         new = mapping_tuple[1]
         self.p_value += 1
         # self.progressbar.update(self.p_value)
+        string = string.upper()
+        # logger.warning('Old : {}'.format(old))
+        _old, _new, use_regex = self.__rex_use(old, new)
+
+        # logger.error('New And Last : {}'.format(_old))
+
+        # logger.warning('Origin from class : {}'.format(self.mapping))
 
         # format dict to replace
-        map_dict = dict(zip(old, new))
+        map_dict = dict(zip(_old, _new))
+
         li = [filename]
 
-        if all(ele.upper() in string.upper() for ele in old):
-            li.append(line_num + 1)
-            for key, item in map_dict.items():
-                li.extend([key, item])
-                # string = string.replace(key, item)
-                string = re.sub(key, item, string, flags=re.I)
-            if len(li) != 12:
-                li.extend([''] * (12 - len(li)))
-            self.log_list.append(li)
-        return string
+        if not use_regex:
+            if all(ele.upper() in string for ele in _old):
+                li.append(line_num + 1)
+                for key, item in map_dict.items():
+                    li.extend([key, item])
+                    # string = string.replace(key, item)
+                    string = re.sub(key, item, string, flags=re.I)
+                if len(li) < 12:
+                    li.extend([''] * (12 - len(li)))
+                # logger.error(li)
+                self.log_list.append(li)
+            return string
+
+        else:
+            # Use Regex is True
+            # logger.warning('Entering Regex Replacing')
+            # logger.warning(old)
+            # logger.warning(string)
+            if all(self.loop_checking(ele, string) for ele in _old):
+                # logger.error('All 條件符合')
+                li.append(line_num + 1)
+
+                for key, item in map_dict.items():
+
+                    searching = re.search(key, string)
+                    dict_to_format = {}
+                    for i in range(len(searching.groups())):
+                        _keys = 'V_PRE{}'.format(i + 1)
+                        dict_to_format[_keys] = searching.group(i + 1)
+
+                    string = re.sub(key, item.format_map(SafeDict(dict_to_format)), string)
+                    li.extend([searching.group(), item.format_map(SafeDict(dict_to_format))])
+
+                if len(li) < 12:
+                    li.extend([''] * (12 - len(li)))
+                # logger.error(li)
+                self.log_list.append(li)
+            return string
+
+    @staticmethod
+    def loop_checking(ele, string):
+        # logger.warning(ele)
+        # logger.error('{} : {}'.format(ele, string))
+
+        if isinstance(ele, str):
+            # logger.warning('ele is string')
+            return ele.upper() in string
+
+        else:
+            if re.search(ele, string):
+                return True
 
 
 def main(mapping_file, target, skip_rows, sheetname=None, output_path=None, button=None, p_bar=None):
@@ -145,6 +242,7 @@ def main(mapping_file, target, skip_rows, sheetname=None, output_path=None, butt
                       skip_rows=skip_rows, p_bar=p_bar)
         p.run()
     except Exception as e:
+        # print(e)
         logger.error(e)
 
     logger.info('Processing End !')
