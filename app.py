@@ -4,7 +4,7 @@ from tkinter.filedialog import askopenfilename
 from tkinter.scrolledtext import ScrolledText
 from tkinter import ttk
 import log
-from _main import main, pathlib
+from _main import main, pathlib, reformat
 from itertools import tee
 
 """
@@ -71,6 +71,7 @@ class App:
         self.output_path = None
         self.recursive = tk.BooleanVar()
         self.progress_bar = None
+        self.reformat_frame = None
 
     def __main_window(self):
         self.window.title('Large Replace With Mapping Excel')
@@ -161,6 +162,20 @@ class App:
         self.output_path.pack(side=tk.TOP)
         self.output_path.insert(tk.END, default_path)
 
+    def __reformat(self):
+        p = threading.Thread(target=reformat, kwargs=dict(file_path=self.output_path.get()))
+
+        self.reformat_frame.after(10, p.start())
+
+    def __reformat_button(self):
+        self.reformat_frame = tk.Frame(self.window)
+        self.reformat_frame.pack()
+
+        button = tk.Button(self.reformat_frame, text='Reformat Summary',
+                           command=self.__reformat)
+
+        button.pack()
+
     def __browsing_multi_target(self):
         target = tk.filedialog.askopenfilenames()
         self.target_file_box.delete(0, tk.END)
@@ -228,6 +243,8 @@ class App:
 
         self.__button_build()
         self.__p_bar()
+
+        self.__reformat_button()
 
         return self.window
 

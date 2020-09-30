@@ -4,12 +4,48 @@ from mapping import *
 import progressbar
 import re
 import time
+
 # import sys
 
 
 progressbar.streams.wrap_stderr()
 logger = log.getLogger(__name__)
 logger.addHandler(log.queue_handler)
+
+
+def reformat(file_path):
+    try:
+
+        logger.info('Reformating Summary With Trinity Info')
+        p = pathlib.Path(file_path).expanduser().resolve()
+
+        p_list = p.rglob('Modified_Summary*')
+
+        new_columns = ['BizEntityName', 'CateGoryName', 'JobName', 'StepName', 'Type',
+                       'FileName', 'Modified Line', 'Ori_Value1', 'New_Value1', 'Ori_Value2',
+                       'New_Value2', 'Ori_Value3', 'New_Value3', 'Ori_Value4', 'New_Value4',
+                       'Ori_Value5', 'New_Value5']
+
+        for f in p_list:
+            logger.info('Reformating  {}'.format(f.name))
+            try:
+                df = pd.read_csv(f)
+            except UnicodeDecodeError:
+                logger.error('Passing Excel ! ReTrying Excel Format')
+                df = pd.read_excel(f)
+            new_p = f.parent / ('FIX_' + f.name)
+
+            df['BizEntityName'] = df['FileName'].apply(lambda x: pathlib.Path(x).stem.split()[0])
+            df['CateGoryName'] = df['FileName'].apply(lambda x: pathlib.Path(x).stem.split()[1])
+            df['JobName'] = df['FileName'].apply(lambda x: pathlib.Path(x).stem.split()[2])
+            df['StepName'] = df['FileName'].apply(lambda x: pathlib.Path(x).stem.split()[3])
+            df['Type'] = df['FileName'].apply(lambda x: pathlib.Path(x).stem.split()[-1])
+            df = df[new_columns]
+            df.to_csv(new_p, index=False)
+
+        logger.info('Complete !')
+    except Exception as e:
+        logger.error(e)
 
 
 class SafeDict(dict):
@@ -73,22 +109,22 @@ class MyProcess:
         self.p_bar['maximum'] = total_len
 
         for index, file in enumerate(self.target_file):
-            logger.info('Now Processing : {}'.format(file.name))
+            logger.info('=============== File START : {}'.format(file.name))
 
             try:
                 with open(file, 'r', encoding='UTF-8') as f:
                     lines = f.readlines()
                 encoder = 'UTF-8'
             except UnicodeDecodeError:
-                logger.warning('UTF-8 Decode Fail ! Trying Big5 !!')
+                # logger.warning('UTF-8 Decode Fail ! Trying Big5 !!')
                 try:
                     with open(file, 'r', encoding='BIG5') as f:
                         lines = f.readlines()
                     encoder = 'BIG5'
                 except ValueError:
-                    logger.warning('Neither "UTF-8" Nor "Big5" Can Decode File ! '
-                                   'File May Be Binary File !! IGNORED IT !! '
-                                   'Check It Manually   File : {}'.format(file))
+                    logger.error('Neither "UTF-8" Nor "Big5" Can Decode File ! '
+                                 'File May Be Binary File !! IGNORED IT !! '
+                                 'Check It Manually   File : {}'.format(file))
                     continue
 
             for dic in self.mapping:
@@ -96,6 +132,7 @@ class MyProcess:
                 # logger.info('From {} to {}'.format(*dic))
                 lines = [self.replace_string(line, dic, file.name, i) for i, line in enumerate(lines)]
                 self.p_bar['value'] = self.p_value
+            logger.info('=============== File END : {}'.format(file.name))
 
             with open(file, 'w', encoding=encoder) as f:
                 f.writelines(lines)
@@ -108,8 +145,9 @@ class MyProcess:
             self.p_bar['value'] = self.p_value
             # self.progressbar.update(self.p_value)
             # self.progressbar.update(self.p_value)
-
+        logger.info('=================== SUMMARY =====================')
         logger.info('Log Amount : {}'.format(len(self.log_list)))
+        logger.info('================= END SUMMARY ===================')
         # self.progressbar.finish()
         if len(self.log_list) != 0:
             self.log_file = pd.DataFrame(self.log_list, columns=[
@@ -118,9 +156,9 @@ class MyProcess:
                 'Ori_Value4', 'New_Value4', 'Ori_Value5', 'New_Value5'
             ])
             self.log_file.sort_values(['FileName', 'Modified Line'], inplace=True)
-            output_file = self.output / './Modified_Summary_{}.xlsx'.format(time.strftime('%Y%m%d%H%M%S'))
+            output_file = self.output / 'Modified_Summary_{}.csv'.format(time.strftime('%Y%m%d%H%M%S'))
             logger.info('Writting Summary to {}'.format(output_file))
-            self.log_file.to_excel(output_file, index=False)
+            self.log_file.to_csv(output_file, index=False)
 
     def __rex_use(self, old_mapping, new_mapping):
         """
@@ -147,14 +185,13 @@ class MyProcess:
 
                 # logger.error(sp)
 
-                prepare_old_mapping = prepare_old_mapping + (re.compile(sp[1], flags=re.I), )
+                prepare_old_mapping = prepare_old_mapping + (re.compile(sp[1], flags=re.I),)
                 # logger.warning('Complete Splitting Regex')
                 # logger.warning(old_mapping[i])
             else:
-                prepare_old_mapping = prepare_old_mapping + (mapping, )
+                prepare_old_mapping = prepare_old_mapping + (mapping,)
 
         if use_regex:
-
             # logger.warning('Change $NUM to {V_PRE$NUM}')
 
             new_mapping = [re.sub(r'\$(\d+)', r'{V_PRE\g<1>}', mapping) for mapping in new_mapping]
@@ -166,7 +203,6 @@ class MyProcess:
         new = mapping_tuple[1]
         self.p_value += 1
         # self.progressbar.update(self.p_value)
-        string = string.upper()
         # logger.warning('Old : {}'.format(old))
         _old, _new, use_regex = self.__rex_use(old, new)
 
@@ -180,7 +216,7 @@ class MyProcess:
         li = [filename]
 
         if not use_regex:
-            if all(ele.upper() in string for ele in _old):
+            if all(ele.upper() in string.upper() for ele in _old):
                 li.append(line_num + 1)
                 for key, item in map_dict.items():
                     li.extend([key, item])
@@ -233,7 +269,6 @@ class MyProcess:
 
 
 def main(mapping_file, target, skip_rows, sheetname=None, output_path=None, button=None, p_bar=None):
-
     if button is not None:
         button.config(state='disable')
     try:
