@@ -156,7 +156,7 @@ class MyProcess:
                 'Ori_Value4', 'New_Value4', 'Ori_Value5', 'New_Value5'
             ])
             self.log_file.sort_values(['FileName', 'Modified Line'], inplace=True)
-            output_file = self.output / 'Modified_Summary_{}.csv'.format(time.strftime('%Y%m%d%H%M%S'))
+            output_file = self.output / 'Modified_Summary_UTF8_{}.csv'.format(time.strftime('%Y%m%d%H%M%S'))
             logger.info('Writting Summary to {}'.format(output_file))
             self.log_file.to_csv(output_file, index=False)
 
